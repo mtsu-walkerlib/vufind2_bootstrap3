@@ -1,0 +1,217 @@
+<?
+    // Set up convenience variables:
+    $account = $this->auth()->getManager();
+    $user = $account->isLoggedIn();
+    $holdings = $this->driver->getRealTimeHoldings();
+    $openUrl = $this->driver->openURLActive('holdings') ? $this->driver->getOpenURL() : false;
+    $offlineMode = $this->ils()->getOfflineMode();
+    // Account for replace_other_urls setting
+    $urls = ($openUrl && $this->driver->replaceURLsWithOpenURL()) ? array() : $this->record($this->driver)->getLinkDetails();
+
+    // Set page title.
+    $this->headTitle($this->translate('Holdings') . ': ' . $this->driver->getBreadcrumb());
+?>
+<? if ($offlineMode == "ils-offline"): ?>
+  <div class="alert alert-warning">
+    <h2><?=$this->transEsc('ils_offline_title')?></h2>
+    <p><strong><?=$this->transEsc('ils_offline_status')?></strong></p>
+    <p><?=$this->transEsc('ils_offline_holdings_message')?></p>
+    <? $supportEmail = $this->escapeHtmlAttr($this->systemEmail()); ?>
+    <p><a href="mailto:<?=$supportEmail?>"><?=$supportEmail?></a></p>
+  </div>
+<? endif; ?>
+<? if (($this->ils()->getHoldsMode() == 'driver' && !empty($holdings)) || $this->ils()->getTitleHoldsMode() == 'driver'): ?>
+  <? if ($account->loginEnabled() && $offlineMode != 'ils-offline'): ?>
+    <? if (!$user): ?>
+      <div class="alert alert-info">
+        <a href="<?=$this->currentPath()?>?login=true&amp;catalogLogin=true"><?=$this->transEsc("Login")?></a> <?=$this->transEsc("hold_login")?>
+      </div>
+    <? elseif (!$user->cat_username): ?>
+      <div class="alert alert-info">
+        <?=$this->translate("hold_profile_html", array('%%url%%' => $this->currentPath() . '?catalogLogin=true'))?>
+      </div>
+    <? endif; ?>
+  <? endif; ?>
+<? endif; ?>
+<? $holdingTitleHold = $this->driver->tryMethod('getRealTimeTitleHold'); if (!empty($holdingTitleHold)): ?>
+    <a class="placehold modal-link" title="<?=$this->transEsc('request_place_text')?>" href="<?=$this->recordLink()->getRequestUrl($holdingTitleHold)?>"><i class="fa fa-flag"></i>&nbsp;<?=$this->transEsc('title_hold_place')?></a>
+<? endif; ?>
+<? if (!empty($urls) || $openUrl): ?>
+  <h3><?=$this->transEsc("Internet")?></h3>
+  <? if (!empty($urls)): ?>
+    <? foreach ($urls as $current): ?>
+      <a href="<?=$this->escapeHtmlAttr($this->proxyUrl($current['url']))?>"><?=$this->escapeHtml($current['desc'])?></a><br/>
+    <? endforeach; ?>
+  <? endif; ?>
+  <? if ($openUrl): ?><?=$this->openUrl($openUrl);?><? endif; ?>
+<? endif; ?>
+<? foreach ($holdings as $holding): ?>
+<h3><?=$this->transEsc('location_' . $holding['location'], array(), $holding['location'])?></h3>
+<table class="table table-striped" summary="<?=$this->transEsc('Holdings details from')?> <?=$this->transEsc($holding['location'])?>">
+  <? $callNos = $this->tab->getUniqueCallNumbers($holding['items']); if (!empty($callNos)): ?>
+  <tr>
+    <th><?=$this->transEsc("Call Number")?>: </th>
+    <td width="50%">
+      <? foreach ($callNos as $callNo): ?>
+        <?=$this->escapeHtml($callNo)?><br />
+      <? endforeach; ?>
+    </td>
+  </tr>
+  <? endif; ?>
+  <? foreach ($this->ils()->getHoldingsTextFieldNames() as $textField): ?>
+    <? if (!empty($holding[$textField])): ?>
+      <tr>
+        <? // Translation for summary is a special case for backwards-compatibility ?>
+        <th><?=$textField == 'summary' ? $this->transEsc("Volume Holdings") : $this->transEsc(ucfirst($textField))?>:</th>
+        <td>
+          <? foreach ($holding[$textField] as $current): ?>
+            <?=$this->escapeHtml($current)?><br/>
+          <? endforeach; ?>
+        </td>
+      </tr>
+    <? endif; ?>
+  <? endforeach; ?>
+  <? foreach ($holding['items'] as $row): ?>
+    <? $check = (isset($row['check']) && $row['check']); ?>
+    <? $checkStorageRetrievalRequest = (isset($row['checkStorageRetrievalRequest']) && $row['checkStorageRetrievalRequest']); ?>
+    <? $checkILLRequest = (isset($row['checkILLRequest']) && $row['checkILLRequest']); ?>
+    <? if (isset($row['barcode']) && $row['barcode'] != ""): ?>
+      <tr vocab="http://schema.org/" typeof="Offer">
+        <th><?=$this->transEsc("Copy")?> <?=$this->escapeHtml($row['number'])?></th>
+        <td>
+          <? if ($row['reserve'] == "Y"): ?>
+            <link property="availability" href="http://schema.org/InStoreOnly" />
+            <?=$this->transEsc("On Reserve - Ask at Circulation Desk")?><br />
+          <? endif; ?>
+          <? if (isset($row['use_unknown_message']) && $row['use_unknown_message']): ?>
+            <span class="text-muted"><?=$this->transEsc("status_unknown_message")?></span>
+          <? else: ?>
+            <? if ($row['availability']): ?>
+              <? /* Begin Available Items (Holds) */ ?>
+               <span class="text-success"><?=$this->transEsc("Available")?><link property="availability" href="http://schema.org/InStock" />
+<br>
+<?//work to restrict button based on location?>
+<? $reserve="Reserves Desk - Walker Library - 1st Floor" ?>
+<? $currtext="Walker Library - Curriculum Collection - Textbooks - 3rd Floor" ?>
+<? $musreserves = "Music Reserves - Listening/Viewing Center - 1st Floor" ?>
+<? $period = "Periodicals - Walker Library - 1st Floor"?>
+<? $ref = "Reference - Walker Library - 1st Floor"?>
+<? $musreserves = "Music Reserves - Listening/Viewing Center - 1st Floor"?>
+<? $musrefscore = "Music (Scores) - Walker Library - 1st Floor"?>
+<? $cpmreadroom = "Center for Popular Music (Mass Comm) - Reading Room"?>
+
+<? if (($holding['location'] != $cpmreadroom) and ($holding['location'] != $reserve) and ($holding['location'] != $currtext) and ($holding['location'] != $period) and ($holding['location'] != $ref) and ($holding['location'] != $musreserves)):?><a href="https://library2.mtsu.edu/search~S1?/<? $uniqueid=($this->driver->getUniqueID())?><? $recordid=substr($uniqueid, 0, -1)?><?=$this->escapeHtml($recordid)?>/<? $uniqueid=($this->driver->getUniqueID())?><? $recordid=substr($uniqueid, 0, -1)?><?=$this->escapeHtml($recordid)?>/1%2C1%2C1%2CB/request~<? $uniqueid=($this->driver->getUniqueID())?><? $recordid=substr($uniqueid, 0, -1)?><? $recordid=preg_replace('/\./', '', $recordid);?><?=$this->escapeHtml($recordid)?>" target="_blank"><img src=https://walker.mtsu.edu/images/150-pull.png title ="Request this book and pickup from circulation desk." alt="Place a hold"></a><? endif; ?>
+
+</span>
+              <? if (isset($row['link']) && $row['link']): ?>
+                <a style="display:inline-block" class="<?=$check ? 'checkRequest ' : ''?>inlineblock modal-link placehold" href="<?=$this->recordLink()->getRequestUrl($row['link'])?>" title="<?=$this->transEsc($check ? "Check Hold" : "Place a Hold")?>"><i class="fa fa-flag"></i>&nbsp;<?=$this->transEsc($check ? "Check Hold" : "Place a Hold")?></a>
+              <? endif; ?>
+              <? if (isset($row['storageRetrievalRequestLink']) && $row['storageRetrievalRequestLink']): ?>
+                <a class="<?=$checkStorageRetrievalRequest ? 'checkStorageRetrievalRequest ' : ''?>modal-link placeStorageRetrievalRequest" href="<?=$this->recordLink()->getRequestUrl($row['storageRetrievalRequestLink'])?>" title="<?=$this->transEsc($checkStorageRetrievalRequest ? "storage_retrieval_request_check_text" : "storage_retrieval_request_place_text")?>"><i class="fa fa-flag"></i>&nbsp;<?=$this->transEsc($checkStorageRetrievalRequest ? "storage_retrieval_request_check_text" : "storage_retrieval_request_place_text")?></a>
+              <? endif; ?>
+              <? if (isset($row['ILLRequestLink']) && $row['ILLRequestLink']): ?>
+                <a class="<?=$checkILLRequest ? 'checkILLRequest ' : ''?>inlineblock modal-link placeILLRequest" href="<?=$this->recordLink()->getRequestUrl($row['ILLRequestLink'])?>"  title="<?=$this->transEsc($checkILLRequest ? "ill_request_check_text" : "ill_request_place_text")?>"><i class="fa fa-flag"></i>&nbsp;<?=$this->transEsc($checkILLRequest ? "ill_request_check_text" : "ill_request_place_text")?></a>
+              <? endif; ?>
+            <? else: ?>
+              <? /* Begin Unavailable Items (Recalls) */ ?>
+              <span class="text-danger"><?=$this->transEsc($row['status'])?><link property="availability" href="http://schema.org/OutOfStock" /></span>
+              <? if (isset($row['returnDate']) && $row['returnDate']): ?>&ndash; <span class="small"><?=$this->escapeHtml($row['returnDate'])?></span><? endif; ?>
+              <? if (isset($row['duedate']) && $row['duedate']): ?>
+                &ndash; <span class="small"><?=$this->transEsc("Checked out. DUE")?>: <?=$this->escapeHtml($row['duedate'])?>
+
+<? if (($holding['location'] != $cpmreadroom) and ($holding['location'] != $reserve) and ($holding['location'] != $currtext) and ($holding['location'] != $period) and ($holding['location'] != $ref) and ($holding['location'] != $musreserves)):?>
+<a href="https://mtsu.illiad.oclc.org/illiad/illiad.dll?Action=10&Form=30&url_ver=Z39.88-2004&rfr_id=info%3Asid%2Fvufind&rft_val_fmt=info%3Aofi%2Ffmt%3Akev%3Amtx%3Abook&rft.genre=unknown&rft.genre=unknown&rft_id=info&rft.isbn=
+<? $isbns = $this->driver->getISBNs(); if (!empty($isbns)): ?>
+<? foreach ($isbns as $field): ?>
+<?=$this->escapeHtml($field)?>
+<? endforeach; ?>
+<? endif; ?>
+&rft.title=
+<?=$this->escapeHtml($this->driver->getShortTitle() . ' ' . $this->driver->getSubtitle() . ' ' . $this->driver->getTitleSection())?>
+<? $authors = $this->driver->getDeduplicatedAuthors(); ?>
+<? if (isset($authors['main']) && !empty($authors['main'])): ?>
+&rft.aulast=<?=$this->escapeHtml($authors['main'])?>
+<? endif; ?>
+%5D
+<? $publications = $this->driver->getPublicationDetails(); if (!empty($publications)): ?>
+<? foreach ($publications as $field): ?>
+<? $pubPlace = $field->getPlace(); if (!empty($pubPlace)): ?>
+&rft.place= <?=$this->escapeHtml($pubPlace)?>
+<? endif; ?>
+<? $pubName = $field->getName(); if (!empty($pubName)): ?>
+&rft.pub=<?=$this->escapeHtml($pubName)?>
+<? endif; ?>
+<? $pubDate = $field->getDate(); if (!empty($pubDate)): ?>
+&rft.date=<?=$this->escapeHtml($pubDate)?>
+<? endif; ?>
+<? endforeach; ?>
+<? endif; ?>
+" target="_blank"><img src=https://walker.mtsu.edu/images/150-request.png title="Request to receive this book through interlibrary loan." alt="Request from another library"></a>
+<? endif; ?>
+
+<? if (($holding['location'] != $cpmreadroom) and ($holding['location'] != $reserve) and ($holding['location'] != $currtext) and ($holding['location'] != $period) and ($holding['location'] != $ref) and ($holding['location'] != $musreserves)):?>
+<a href="https://library2.mtsu.edu/search~S1?/
+<? $uniqueid=($this->driver->getUniqueID())?>
+<? $recordid=substr($uniqueid, 0, -1)?>
+<?=$this->escapeHtml($recordid)?>
+/
+<? $uniqueid=($this->driver->getUniqueID())?>
+<? $recordid=substr($uniqueid, 0, -1)?>
+<?=$this->escapeHtml($recordid)?>
+/1%2C1%2C1%2CB/request~
+<? $uniqueid=($this->driver->getUniqueID())?>
+<? $recordid=substr($uniqueid, 0, -1)?>
+<? $recordid=preg_replace('/\./', '', $recordid);?>
+<?=$this->escapeHtml($recordid)?>
+" target="_blank"><img src=https://walker.mtsu.edu/images/150-wait.png title ="Get notified when this book is returned." alt="Place a hold"></a>
+<? endif; ?>
+
+</span>
+              <? endif; ?>
+              <? if (isset($row['requests_placed']) && $row['requests_placed'] > 0): ?>
+                <span><?=$this->transEsc("Requests")?>: <?=$this->escapeHtml($row['requests_placed'])?></span>
+              <? endif; ?>
+              <? if (isset($row['link']) && $row['link']): ?>
+                <a class="<?=$check ? 'checkRequest' : ''?> modal-link inlineblock placehold" href="<?=$this->recordLink()->getRequestUrl($row['link'])?>"><i class="fa fa-flag"></i>&nbsp;<?=$this->transEsc($check ? "Check Recall" : "Recall This")?></a>
+              <? endif; ?>
+            <? endif; ?>
+          <? endif; ?>
+          <? /* Embed item structured data: library, barcode, call number */ ?>
+          <? if ($row['location']): ?>
+            <meta property="seller" content="<?=$this->escapeHtmlAttr($row['location'])?>" />
+          <? endif; ?>
+          <? if ($row['barcode']): ?>
+            <meta property="serialNumber" content="<?=$this->escapeHtmlAttr($row['barcode'])?>" />
+          <? endif; ?>
+          <? if ($row['callnumber']): ?>
+            <meta property="sku" content="<?=$this->escapeHtmlAttr($row['callnumber'])?>" />
+          <? endif; ?>
+          <? /* Declare that the item is to be borrowed, not for sale */ ?>
+            <link property="businessFunction" href="http://purl.org/goodrelations/v1#LeaseOut" />
+            <link property="itemOffered" href="#record" />
+        </td>
+      </tr>
+    <? endif; ?>
+  <? endforeach; ?>
+  <? if (!empty($holding['purchase_history'])): ?>
+    <tr>
+      <th><?=$this->transEsc("Most Recent Received Issues")?>:</th>
+      <td>
+        <? foreach ($holding['purchase_history'] as $current): ?>
+          <?=$this->escapeHtml($current['issue'])?><br/>
+        <? endforeach; ?>
+      </td>
+    </tr>
+  <? endif; ?>
+</table>
+<? endforeach; ?>
+
+<? $history = $this->driver->getRealTimeHistory(); ?>
+<? if (is_array($history) && !empty($history)): ?>
+<h3><?=$this->transEsc("Most Recent Received Issues")?></h3>
+<table class="table table-striped">
+  <? foreach ($history as $row): ?>
+    <tr><td><?=$this->escapeHtml($row['issue'])?></td></tr>
+  <? endforeach; ?>
+</table>
+<? endif; ?>
